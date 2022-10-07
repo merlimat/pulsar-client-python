@@ -20,17 +20,39 @@
 
 set -e -x
 
-ROOT_DIR=$(git rev-parse --show-toplevel)
+ROOT_DIR=$(dirname $(dirname $0))
+CPP_CLIENT_VERSION=$(cat $ROOT_DIR/pulsar-client-cpp-version.txt | xargs)
 
-cd $ROOT_DIR
+if [ $USER != "root" ]; then
+  SUDO="sudo"
+fi
 
-CPP_CLIENT_VERSION=$(cat pulsar-client-cpp-version.txt | xargs)
+# Get the flavor of Linux
+export $(cat /etc/*-release | grep "^ID=")
+
+cd /tmp
 
 # Fetch the client binaries
 ## TODO: Fetch from official release once it's available
-pushd /tmp
-  curl -L -O https://github.com/merlimat/pulsar-client-cpp/releases/download/${CPP_CLIENT_VERSION}/apache-pulsar-client.deb
-  curl -L -O https://github.com/merlimat/pulsar-client-cpp/releases/download/${CPP_CLIENT_VERSION}/apache-pulsar-client-dev.deb
-popd
+BASE_URL=https://github.com/merlimat/pulsar-client-cpp/releases/download/${CPP_CLIENT_VERSION}-1
 
-sudo apt install /tmp/apache-pulsar-client.deb /tmp/apache-pulsar-client-dev.deb
+if [ $ID == 'ubuntu' ]; then
+  curl -L -O ${BASE_URL}/apache-pulsar-client.deb
+  curl -L -O ${BASE_URL}/apache-pulsar-client-dev.deb
+  $SUDO apt install /tmp/*.deb
+
+elif [ $ID == 'alpine' ]; then
+  echo "Alpine"
+
+elif [ $ID == '"centos"' ]; then
+  curl -L -O ${BASE_URL}/apache-pulsar-client-3.0.0-1.x86_64.rpm
+  curl -L -O ${BASE_URL}/apache-pulsar-client-devel-3.0.0-1.x86_64.rpm
+  $SUDO rpm -i /tmp/*.rpm
+
+else
+  echo "Unknown Linux distribution: '$ID'"
+  exit 1
+fi
+
+
+

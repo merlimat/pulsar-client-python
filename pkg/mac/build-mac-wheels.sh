@@ -41,7 +41,7 @@ CURL_VERSION=7.61.0
 ROOT_DIR=$(git rev-parse --show-toplevel)
 cd "${ROOT_DIR}"
 
-PULSAR_VERSION=$(cat version.txt | grep pulsar-client-cpp | awk '{print $2}')
+PULSAR_VERSION=$(cat version.txt | xargs)
 
 # Compile and cache dependencies
 CACHE_DIR=~/.pulsar-mac-wheels-cache

@@ -17,12 +17,13 @@
 # under the License.
 #
 
-name: PR validation
+name: Build release wheels
 on:
-  pull_request:
-    branches: ['main']
   push:
-    branches: ['*']
+    tags:
+      - '*'
+    branches:
+      - '*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,51 +31,32 @@ concurrency:
 
 jobs:
 
-  unit-tests:
-    name: Run unit tests
+  linux-wheel:
+    name: Wheel ${{matrix.image.name}} - Py ${{matrix.python.version}} - ${{matrix.cpu.platform}}
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - {name: 'manylinux2014', py_suffix: ''}
+          - {name: 'manylinux_musl', py_suffix: '-alpine'}
+        python:
+          - {version: '3.7', spec: 'cp37-cp37m'}
+          - {version: '3.8', spec: 'cp38-cp38'}
+          - {version: '3.9', spec: 'cp39-cp39'}
+          - {version: '3.10', spec: 'cp310-cp310'}
+        cpu:
+          - {arch: 'x86_64', platform: 'x86_64'}
+          - {arch: 'aarch64', platform: 'arm64'}
 
     steps:
       - name: checkout
         uses: actions/checkout@v3
 
-      - name: Install deps
-        run: sudo apt-get install -y libboost-python-dev
-
-      - name: Install Pulsar C++ client
-        run: build-support/install-cpp-client.sh
-
-      - name: CMake
-        run: cmake .
-
-      - name: Build
-        run: make -j8
-
-      - name: Python install
-        run: |
-            ./setup.py bdist_wheel
-            WHEEL=$(find dist -name '*.whl')
-            pip3 install ${WHEEL}[avro]
-
-      - name: Start Pulsar service
-        run: ./build-support/pulsar-test-service-start.sh
-
-      - name: Run unit tests
-        run: ./tests/run-unit-tests.sh
-
-      - name: Stop Pulsar service
-        run: ./build-support/pulsar-test-service-stop.sh
-
-
-  wheel-manylinux2014-x86_64:
-    name: Build wheel ManyLinux 2014 - x86-64
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-
-    steps:
-      - name: checkout
-        uses: actions/checkout@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
 
       - uses: docker/setup-buildx-action@v2
       - run: build-support/copy-deps-versionfile.sh
@@ -82,23 +64,24 @@ jobs:
       - name: Build Manylinux Docker image
         uses: docker/build-push-action@v3
         with:
-          context: ./pkg/manylinux2014
+          context: ./pkg/${{matrix.image.name}}
           load: true
           tags: build:latest
+          platforms: linux/${{matrix.cpu.arch}}
           build-args: |
-                  PLATFORM=x86_64
-                  ARCH=x86_64
-                  PYTHON_VERSION=3.10
-                  PYTHON_SPEC=cp310-cp310
+            PLATFORM=${{matrix.cpu.platform}}
+            ARCH=${{matrix.cpu.arch}}
+            PYTHON_VERSION=${{matrix.python.version}}
+            PYTHON_SPEC=${{matrix.python.spec}}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build wheel file
-        run: | 
+        run: |
           docker run -i -v $PWD:/pulsar-client-python build:latest \
               /pulsar-client-python/pkg/build-wheel-inside-docker.sh
 
       - name: Test wheel file
         run: |
-          docker run -i -v $PWD:/pulsar-client-python python:3.10 \
+          docker run -i -v $PWD:/pulsar-client-python python:${{matrix.python.version}}${{matrix.image.py_suffix}} \
               /pulsar-client-python/pkg/test-wheel.sh
