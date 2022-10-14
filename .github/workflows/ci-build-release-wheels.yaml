@@ -22,6 +22,8 @@ on:
   push:
     tags:
       - '*'
+    branches:
+      - '*'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,71 +31,71 @@ concurrency:
 
 jobs:
 
-  linux-wheel:
-    name: Wheel ${{matrix.image.name}} - Py ${{matrix.python.version}} - ${{matrix.cpu.platform}}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 300
-
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - {name: 'manylinux2014', py_suffix: ''}
-          - {name: 'manylinux_musl', py_suffix: '-alpine'}
-        python:
-          - {version: '3.7', spec: 'cp37-cp37m'}
-          - {version: '3.8', spec: 'cp38-cp38'}
-          - {version: '3.9', spec: 'cp39-cp39'}
-          - {version: '3.10', spec: 'cp310-cp310'}
-        cpu:
-          - {arch: 'x86_64', platform: 'x86_64'}
-          - {arch: 'aarch64', platform: 'arm64'}
-
-    steps:
-      - name: checkout
-        uses: actions/checkout@v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - uses: docker/setup-buildx-action@v2
-      - run: build-support/copy-deps-versionfile.sh
-
-      - name: Build Manylinux Docker image
-        uses: docker/build-push-action@v3
-        with:
-          context: ./pkg/${{matrix.image.name}}
-          load: true
-          tags: build:latest
-          platforms: linux/${{matrix.cpu.arch}}
-          build-args: |
-            PLATFORM=${{matrix.cpu.platform}}
-            ARCH=${{matrix.cpu.arch}}
-            PYTHON_VERSION=${{matrix.python.version}}
-            PYTHON_SPEC=${{matrix.python.spec}}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build wheel file
-        run: |
-          docker run -i -v $PWD:/pulsar-client-python build:latest \
-              /pulsar-client-python/pkg/build-wheel-inside-docker.sh
-
-      - name: Test wheel file
-        run: |
-          docker run -i -v $PWD:/pulsar-client-python \
-              --platform linux/${{matrix.cpu.arch}} \
-              python:${{matrix.python.version}}${{matrix.image.py_suffix}} \
-              /pulsar-client-python/pkg/test-wheel.sh
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: wheel-${{matrix.image.name}}-py${{matrix.python.version}}-${{matrix.cpu.platform}}
-          path: wheelhouse/*.whl
+#  linux-wheel:
+#    name: Wheel ${{matrix.image.name}} - Py ${{matrix.python.version}} - ${{matrix.cpu.platform}}
+#    runs-on: ubuntu-22.04
+#    timeout-minutes: 300
+#
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        image:
+#          - {name: 'manylinux2014', py_suffix: ''}
+#          - {name: 'manylinux_musl', py_suffix: '-alpine'}
+#        python:
+#          - {version: '3.7', spec: 'cp37-cp37m'}
+#          - {version: '3.8', spec: 'cp38-cp38'}
+#          - {version: '3.9', spec: 'cp39-cp39'}
+#          - {version: '3.10', spec: 'cp310-cp310'}
+#        cpu:
+#          - {arch: 'x86_64', platform: 'x86_64'}
+#          - {arch: 'aarch64', platform: 'arm64'}
+#
+#    steps:
+#      - name: checkout
+#        uses: actions/checkout@v3
+#
+#      - name: Set up QEMU
+#        uses: docker/setup-qemu-action@v2
+#
+#      - uses: docker/setup-buildx-action@v2
+#      - run: build-support/copy-deps-versionfile.sh
+#
+#      - name: Build Manylinux Docker image
+#        uses: docker/build-push-action@v3
+#        with:
+#          context: ./pkg/${{matrix.image.name}}
+#          load: true
+#          tags: build:latest
+#          platforms: linux/${{matrix.cpu.arch}}
+#          build-args: |
+#            PLATFORM=${{matrix.cpu.platform}}
+#            ARCH=${{matrix.cpu.arch}}
+#            PYTHON_VERSION=${{matrix.python.version}}
+#            PYTHON_SPEC=${{matrix.python.spec}}
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#
+#      - name: Build wheel file
+#        run: |
+#          docker run -i -v $PWD:/pulsar-client-python build:latest \
+#              /pulsar-client-python/pkg/build-wheel-inside-docker.sh
+#
+#      - name: Test wheel file
+#        run: |
+#          docker run -i -v $PWD:/pulsar-client-python \
+#              --platform linux/${{matrix.cpu.arch}} \
+#              python:${{matrix.python.version}}${{matrix.image.py_suffix}} \
+#              /pulsar-client-python/pkg/test-wheel.sh
+#
+#      - name: Upload artifacts
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: wheel-${{matrix.image.name}}-py${{matrix.python.version}}-${{matrix.cpu.platform}}
+#          path: wheelhouse/*.whl
 
   mac-wheels:
-    name: Wheel MacOS Universal2 - Py ${{matrix.py.version}}
+    name: Wheel MacOS - Py ${{matrix.py.version}} - ${{matrix.cpu.platform}}
     runs-on: macos-12
     timeout-minutes: 300
 
@@ -103,8 +105,11 @@ jobs:
         py:
           - {version: '3.7', version_long:  '3.7.14'}
           - {version: '3.8', version_long:  '3.8.13'}
-          - {version: '3.9', version_long:  '3.9.14'}
-          - {version: '3.10', version_long:  '3.10.7'}
+#          - {version: '3.9', version_long:  '3.9.14'}
+#          - {version: '3.10', version_long:  '3.10.7'}
+        cpu:
+          - { arch: 'x86_64', platform: 'x86_64' }
+          - { arch: 'aarch64', platform: 'arm64' }
 
     steps:
       - name: checkout
@@ -115,29 +120,29 @@ jobs:
         id: cache-deps
         with:
           path: .pulsar-mac-build/deps/install
-          key: ${{matrix.py.version_long}}-${{ hashFiles('dependencies.yaml') }}-${{ hashFiles('pkg/mac/*') }}
+          key: ${{matrix.py.version_long}}-${{matrix.cpu.platform}}-${{matrix.py.version_long}}-${{ hashFiles('dependencies.yaml') }}-${{ hashFiles('pkg/mac/*') }}
 
       - name: Build dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
-        run: pkg/mac/build-dependencies.sh ${{matrix.py.version}} ${{matrix.py.version_long}}
+        run: pkg/mac/build-dependencies.sh ${{matrix.py.version}} ${{matrix.py.version_long}} ${{matrix.cpu.platform}} ${{matrix.cpu.arch}}
 
       - name: Pulsar C++ cache
         uses: actions/cache@v3
         id: cache-cpp
         with:
           path: .pulsar-mac-build/cpp/install
-          key: ${{ hashFiles('dependencies.yaml') }}-${{ hashFiles('pulsar-client-cpp-version.txt') }}-${{ hashFiles('pkg/mac/*') }}
+          key: ${{matrix.cpu.platform}}-${{ hashFiles('dependencies.yaml') }}-${{ hashFiles('pulsar-client-cpp-version.txt') }}-${{ hashFiles('pkg/mac/*') }}
 
       - name: Build Pulsar C++ client
         if: steps.cache-cpp.outputs.cache-hit != 'true'
-        run: pkg/mac/build-pulsar-cpp.sh
+        run: pkg/mac/build-pulsar-cpp.sh ${{matrix.cpu.platform}}
 
       - name: Build and test Mac wheels
-        run: pkg/mac/build-mac-wheels.sh ${{matrix.py.version}}
+        run: pkg/mac/build-mac-wheels.sh ${{matrix.py.version}} ${{matrix.cpu.platform}}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: wheel-mac-py${{matrix.py.version}}
+          name: wheel-mac-py${{matrix.py.version}}-${{matrix.cpu.platform}}
           path: dist/*.whl
 

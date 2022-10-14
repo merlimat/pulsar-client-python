@@ -28,6 +28,7 @@ source pkg/mac/common.sh
 PYTHON_CLIENT_VERSION=$(cat version.txt | xargs)
 
 PYTHON_VERSION=$1
+PLATFORM=$2
 
 ###############################################################################
 ###############################################################################
@@ -47,15 +48,10 @@ rm -f CMakeCache.txt
 PY_EXE=$PREFIX/bin/python3
 PIP_EXE=$PREFIX/bin/pip3
 
-ARCHS='arm64;x86_64'
-PIP_TAG='universal2'
-if [ $PYTHON_VERSION = '3.7' ]; then
-    ARCHS='x86_64'
-    PIP_TAG=$ARCHS
-fi
+PIP_TAG=${PLATFORM}
 
 cmake . \
-        -DCMAKE_OSX_ARCHITECTURES=${ARCHS} \
+        -DCMAKE_OSX_ARCHITECTURES=${PLATFORM} \
         -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET} \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH=$PREFIX \

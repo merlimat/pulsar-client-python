@@ -23,6 +23,8 @@ set -e -x
 ROOT_DIR=$(git rev-parse --show-toplevel)
 cd "${ROOT_DIR}"
 
+PLATFORM=$1
+
 source pkg/mac/common.sh
 
 PULSAR_CPP_VERSION=$(cat pulsar-client-cpp-version.txt | xargs)
@@ -43,10 +45,9 @@ tar xfz apache-pulsar-client-cpp-${PULSAR_CPP_VERSION}.tar.gz
 
 if [ ! -f apache-pulsar-client-cpp-${PULSAR_CPP_VERSION}/.done ]; then
   pushd apache-pulsar-client-cpp-${PULSAR_CPP_VERSION}
-      ARCHS='arm64;x86_64'
 
       cmake . \
-              -DCMAKE_OSX_ARCHITECTURES=${ARCHS} \
+              -DCMAKE_OSX_ARCHITECTURES=${PLATFORM} \
               -DCMAKE_OSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET} \
               -DCMAKE_INSTALL_PREFIX=$PREFIX \
               -DCMAKE_BUILD_TYPE=Release \

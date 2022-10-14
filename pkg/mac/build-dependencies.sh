@@ -25,6 +25,8 @@ cd "${ROOT_DIR}"
 
 PYTHON_VERSION=$1
 PYTHON_VERSION_LONG=$2
+PLATFORM=$3
+ARCH=$4
 
 source pkg/mac/common.sh
 
@@ -44,8 +46,11 @@ CACHE_DIR=${CACHE_DIR_DEPS}
 mkdir -p $CACHE_DIR
 cd $CACHE_DIR
 
-PREFIX=$CACHE_DIR/install
+export PREFIX=$CACHE_DIR/install
 
+export CFLAGS="-fPIC -O3 -arch ${PLATFORM} -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}"
+export CXXFLAGS=$CFLAGS
+export LDFLAGS=" -arch ${PLATFORM} -L${PREFIX}/lib"
 
 ###############################################################################
 if [ ! -f zlib-${ZLIB_VERSION}/.done ]; then
@@ -53,7 +58,7 @@ if [ ! -f zlib-${ZLIB_VERSION}/.done ]; then
     curl -O -L https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
     tar xfz zlib-$ZLIB_VERSION.tar.gz
     pushd zlib-$ZLIB_VERSION
-      CFLAGS="-fPIC -O3 -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" ./configure --prefix=$PREFIX
+      ./configure --prefix=$PREFIX
       make -j16
       make install
       touch .done
@@ -68,17 +73,12 @@ if [ ! -f Python-${PYTHON_VERSION_LONG}/.done ]; then
   curl -O -L https://www.python.org/ftp/python/${PYTHON_VERSION_LONG}/Python-${PYTHON_VERSION_LONG}.tgz
   tar xfz Python-${PYTHON_VERSION_LONG}.tgz
 
-  pushd Python-${PYTHON_VERSION_LONG}
-      if [ $PYTHON_VERSION = '3.7' ]; then
-          UNIVERSAL_ARCHS='intel-64'
-          PY_CFLAGS=" -arch x86_64"
-      else
-          UNIVERSAL_ARCHS='universal2'
-      fi
+#  brew install python@${PYTHON_VERSION}
 
-      CFLAGS="-fPIC -O3 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET} -I${PREFIX}/include ${PY_CFLAGS}" \
-          LDFLAGS=" ${PY_CFLAGS} -L${PREFIX}/lib" \
-          ./configure --prefix=$PREFIX --enable-shared --enable-universalsdk --with-universal-archs=${UNIVERSAL_ARCHS}
+  pushd Python-${PYTHON_VERSION_LONG}
+      CFLAGS="${CFLAGS} -I${PREFIX}/include" \
+          arch=${PLATFORM} \
+          ./configure --prefix=$PREFIX --enable-shared
       make -j16
       make install
 
@@ -96,33 +96,15 @@ OPENSSL_VERSION_UNDERSCORE=$(echo $OPENSSL_VERSION | sed 's/\./_/g')
 if [ ! -f openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}.done ]; then
     echo "Building OpenSSL"
     curl -O -L https://github.com/openssl/openssl/archive/OpenSSL_${OPENSSL_VERSION_UNDERSCORE}.tar.gz
-    # -arch arm64 -arch x86_64
     tar xfz OpenSSL_${OPENSSL_VERSION_UNDERSCORE}.tar.gz
 
-    mv openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE} openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-arm64
-    pushd openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-arm64
+    pushd openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}
       echo -e "#include <string.h>\n$(cat test/v3ext.c)" > test/v3ext.c
       CFLAGS="-fPIC -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-          ./Configure --prefix=$PREFIX no-shared no-unit-test darwin64-arm64-cc
+          ./Configure --prefix=$PREFIX no-shared no-unit-test darwin64-${PLATFORM}-cc
       make -j8
       make install_sw
     popd
-
-    tar xfz OpenSSL_${OPENSSL_VERSION_UNDERSCORE}.tar.gz
-    mv openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE} openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-x86_64
-    pushd openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-x86_64
-    echo -e "#include <string.h>\n$(cat test/v3ext.c)" > test/v3ext.c
-      CFLAGS="-fPIC -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-          ./Configure --prefix=$PREFIX no-shared no-unit-test darwin64-x86_64-cc
-      make -j8
-      make install_sw
-    popd
-
-    # Create universal binaries
-    lipo -create openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-arm64/libssl.a openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-x86_64/libssl.a \
-          -output $PREFIX/lib/libssl.a
-    lipo -create openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-arm64/libcrypto.a openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}-x86_64/libcrypto.a \
-              -output $PREFIX/lib/libcrypto.a
 
     touch openssl-OpenSSL_${OPENSSL_VERSION_UNDERSCORE}.done
 else
@@ -153,7 +135,7 @@ if [ ! -f $DIR/.done ]; then
 EOF
       ./bootstrap.sh --with-libraries=python --with-python=python3 --with-python-root=$PREFIX \
             --prefix=${PREFIX}
-      ./b2 -d0 address-model=64 cxxflags="-fPIC -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
+      ./b2 -d0 address-model=64 cxxflags="$CXXFLAGS" \
                 link=static threading=multi \
                 --user-config=./user-config.jam \
                 variant=release python=${PYTHON_VERSION} \
@@ -173,8 +155,7 @@ if [ ! -f protobuf-${PROTOBUF_VERSION}/.done ]; then
     curl -O -L  https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-cpp-${PROTOBUF_VERSION}.tar.gz
     tar xfz protobuf-cpp-${PROTOBUF_VERSION}.tar.gz
     pushd protobuf-${PROTOBUF_VERSION}
-      CXXFLAGS="-fPIC -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-            ./configure --prefix=$PREFIX
+      ./configure --prefix=$PREFIX
       make -j16
       make install
       touch .done
@@ -189,8 +170,7 @@ if [ ! -f zstd-${ZSTD_VERSION}/.done ]; then
     curl -O -L https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz
     tar xfz zstd-${ZSTD_VERSION}.tar.gz
     pushd zstd-${ZSTD_VERSION}
-      CFLAGS="-fPIC -O3 -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" PREFIX=$PREFIX \
-            make -j16 -C lib install-static install-includes
+       make -j16 -C lib install-static install-includes
       touch .done
     popd
 else
@@ -203,8 +183,7 @@ if [ ! -f snappy-${SNAPPY_VERSION}/.done ]; then
     curl -O -L https://github.com/google/snappy/archive/refs/tags/${SNAPPY_VERSION}.tar.gz
     tar xfz ${SNAPPY_VERSION}.tar.gz
     pushd snappy-${SNAPPY_VERSION}
-      CXXFLAGS="-fPIC -O3 -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-          cmake . -DCMAKE_INSTALL_PREFIX=$PREFIX -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
+      cmake . -DCMAKE_INSTALL_PREFIX=$PREFIX -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
       make -j16
       make install
       touch .done
@@ -220,8 +199,7 @@ if [ ! -f curl-${CURL_VERSION}/.done ]; then
     curl -O -L  https://github.com/curl/curl/releases/download/curl-${CURL_VERSION_}/curl-${CURL_VERSION}.tar.gz
     tar xfz curl-${CURL_VERSION}.tar.gz
     pushd curl-${CURL_VERSION}
-      CFLAGS="-fPIC -arch arm64 -arch x86_64 -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}" \
-            ./configure --with-ssl=$PREFIX \
+      ./configure --with-ssl=$PREFIX \
               --without-nghttp2 \
               --without-libidn2 \
               --disable-ldap \
